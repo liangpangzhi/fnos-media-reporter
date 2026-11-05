@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>飞牛 NAS 影音库统计报表</title>
+<style>
+:root{
+  --bg:#f4f6f9; --card:#fff; --line:#e6eaf0; --text:#1d2530; --muted:#6b7787;
+  --primary:#2563eb; --primary-soft:#e8f0fe; --warn:#d97706; --warn-soft:#fef3e2;
+  --danger:#dc2626; --ok:#0f9d58; --ok-soft:#e6f6ee;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.6 system-ui,-apple-system,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;}
+header{background:linear-gradient(120deg,#1e3a8a,#2563eb);color:#fff;padding:22px 28px 20px;}
+header h1{margin:0;font-size:20px;font-weight:600;letter-spacing:.5px}
+header .meta{margin-top:8px;font-size:12.5px;opacity:.9;display:flex;gap:22px;flex-wrap:wrap}
+main{padding:20px 28px 60px;max-width:1560px;margin:0 auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.kpi .label{color:var(--muted);font-size:12.5px}
+.kpi .value{font-size:23px;font-weight:650;margin-top:4px;letter-spacing:.3px}
+.kpi .sub{font-size:12px;color:var(--muted);margin-top:2px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 16px;border-bottom:1px solid var(--line);padding-bottom:0}
+.tab{padding:9px 15px;border-radius:10px 10px 0 0;cursor:pointer;color:var(--muted);font-size:13.5px;border:1px solid transparent;border-bottom:none}
+.tab.active{background:var(--card);color:var(--primary);border-color:var(--line);font-weight:600}
+.panel{display:none}
+.panel.active{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:16px}
+.card h3{margin:0 0 12px;font-size:14.5px;font-weight:650;color:#2a3644}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;background:#fafbfd;position:sticky;top:0;white-space:nowrap;font-size:12.5px;cursor:pointer;user-select:none}
+th.nosort{cursor:default}
+tbody tr:hover{background:#f8fafd}
+.bar{height:8px;border-radius:4px;background:var(--primary);min-width:2px;display:block}
+.barwrap{display:flex;align-items:center;gap:10px}
+.barwrap .fill{flex:0 0 46%;background:#eef2f8;border-radius:4px;overflow:hidden;height:8px}
+.barwrap .fill span{display:block;height:8px;background:linear-gradient(90deg,#3b82f6,#2563eb)}
+.barwrap .num{color:var(--muted);font-size:12px;white-space:nowrap}
+.tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11.5px;border:1px solid transparent;white-space:nowrap}
+.tag.movie{background:#e8f0fe;color:#1d4ed8}
+.tag.tv{background:#e6f6ee;color:#0b7a44}
+.tag.anime{background:#fde8f3;color:#b3247a}
+.tag.doc{background:#f0e8fd;color:#6b21a8}
+.tag.other{background:#eef1f5;color:#4b5563}
+.tag.warn{background:var(--warn-soft);color:#b45309}
+.tag.ok{background:var(--ok-soft);color:#0b7a44}
+.tag.danger{background:#fde8e8;color:#b91c1c}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+input[type=text],select{padding:7px 11px;border:1px solid var(--line);border-radius:9px;font-size:13px;background:#fff;color:var(--text);outline:none}
+input[type=text]{min-width:240px}
+input[type=text]:focus,select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+button{padding:7px 14px;border:1px solid var(--line);border-radius:9px;background:#fff;cursor:pointer;font-size:13px;color:#33414f}
+button:hover{border-color:var(--primary);color:var(--primary)}
+button.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+.hint{color:var(--muted);font-size:12.5px}
+.expand{background:#fbfcfe;border-left:3px solid var(--primary);padding:0}
+.expand td{padding:0}
+.sub{margin:0;padding:12px 14px}
+.sub table{font-size:12.5px}
+.sub th{background:#f3f6fb;position:static;cursor:default}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:11.8px;color:#4b5563;word-break:break-all}
+.pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;font-size:12.5px;color:var(--muted)}
+.pager button{padding:4px 10px}
+.miss{color:var(--danger);font-size:12.3px}
+.okc{color:var(--ok)}
+.path{font-family:ui-monospace,Consolas,monospace;font-size:11.8px;color:#5a6675;word-break:break-all}
+details summary{cursor:pointer;color:var(--primary);font-size:12.5px}
+.foot{margin-top:26px;color:var(--muted);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>飞牛 NAS 影音库统计报表</h1>
+  <div class="meta" id="head-meta"></div>
+</header>
+<main>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="overview">总览分布</div>
+    <div class="tab" data-tab="works">作品明细</div>
+    <div class="tab" data-tab="episodes">剧集明细</div>
+    <div class="tab" data-tab="location">放置位置</div>
+    <div class="tab" data-tab="issues">缺集与异常</div>
+    <div class="tab" data-tab="recent">最近入库</div>
+  </div>
+
+  <div class="panel active" id="panel-overview">
+    <div class="grid2">
+      <div class="card"><h3>按分类</h3><table id="tbl-category"></table></div>
+      <div class="card"><h3>按存储卷</h3><table id="tbl-volume"></table></div>
+      <div class="card"><h3>按媒体库</h3><table id="tbl-lib"></table></div>
+      <div class="card"><h3>分辨率分布</h3><table id="tbl-res"></table></div>
+      <div class="card"><h3>视频编码分布</h3><table id="tbl-codec"></table></div>
+      <div class="card"><h3>片源类型分布</h3><table id="tbl-source"></table></div>
+      <div class="card"><h3>剧集季数分布</h3><table id="tbl-season"></table></div>
+      <div class="card"><h3>容量 Top 20 作品</h3><table id="tbl-top"></table></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-works">
+    <div class="card">
+      <div class="toolbar">
+        <input type="text" id="w-q" placeholder="搜索作品名 / 年份">
+        <select id="w-cat"><option value="">全部分类</option></select>
+        <select id="w-kind"><option value="">全部类型</option><option>电影</option><option>剧集</option></select>
+        <select id="w-vol"><option value="">全部卷</option></select>
+        <select id="w-issue"><option value="">全部状态</option><option value="missing">有缺集</option><option value="dup">有重复</option><option value="anos">有结构异常</option><option value="nosub">字幕不全</option></select>
+        <select id="w-sort">
+          <option value="size">按容量降序</option>
+          <option value="files">按集数降序</option>
+          <option value="year">按年份降序</option>
+          <option value="title">按名称升序</option>
+        </select>
+        <button id="btn-export-w">导出作品 CSV</button>
+        <span class="hint" id="w-count"></span>
+      </div>
+      <table id="tbl-works"></table>
+      <div class="pager" id="w-pager"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-episodes">
+    <div class="card">
+      <div class="toolbar">
+        <input type="text" id="e-q" placeholder="搜索标题 / 单集名 / 路径">
+        <select id="e-cat"><option value="">全部分类</option></select>
+        <select id="e-res"><option value="">全部分辨率</option></select>
+        <select id="e-sub"><option value="">全部</option><option value="1">有字幕</option><option value="0">无字幕</option></select>
+        <button id="btn-export-e">导出文件 CSV</button>
+        <span class="hint" id="e-count"></span>
+      </div>
+      <table id="tbl-eps"></table>
+      <div class="pager" id="e-pager"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-location">
+    <div class="card"><h3>卷 / 媒体库 / 目录 分布</h3><div id="loc-tree"></div></div>
+  </div>
+
+  <div class="panel" id="panel-issues">
+    <div class="card">
+      <div class="toolbar">
+        <select id="i-level"><option value="">全部级别</option><option value="warn">需关注</option><option value="info">提示</option></select>
+        <select id="i-kind"><option value="">全部类型</option></select>
+        <span class="hint" id="i-count"></span>
+      </div>
+      <table id="tbl-issues"></table>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-recent">
+    <div class="card"><h3>最近入库 30 个文件</h3><table id="tbl-recent"></table></div>
+  </div>
+
+  <div class="foot" id="foot"></div>
+</main>
+
+<script>
+const DATA = {{.Data}};
+
+// 归一化：Go 的空切片会序列化为 null，统一补成空数组
+(function(){
+  const A=(v)=>Array.isArray(v)?v:[];
+  A(DATA.works).forEach(function(w){
+    w.missing=A(w.missing); w.duplicates=A(w.duplicates); w.anomalies=A(w.anomalies);
+    w.dirs=A(w.dirs); w.volumes=A(w.volumes); w.libraries=A(w.libraries); w.file_idx=A(w.file_idx);
+  });
+  A(DATA.files).forEach(function(f){ f.anomalies=A(f.anomalies); });
+  DATA.anomaly_list=A(DATA.anomaly_list);
+  ["volume_stats","lib_stats","category_stats","res_stats","codec_stats","source_stats","season_dist","genre_stats","top_big","recent"].forEach(function(k){ DATA[k]=A(DATA[k]); });
+})();
+
+function esc(s){ if(s===null||s===undefined) return ""; return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+function fmtSize(b){ if(!b) return "0 B"; const u=["B","KB","MB","GB","TB"]; let i=0,v=b; while(v>=1024&&i<u.length-1){v/=1024;i++;} return (v>=100? v.toFixed(0): v.toFixed(v>=10?1:2))+" "+u[i]; }
+function fmtNum(n){ return (n||0).toLocaleString("zh-CN"); }
+function catClass(c){ return {"电影":"movie","电视剧":"tv","动漫":"anime","纪录片":"doc"}[c]||"other"; }
+function baseName(p){ const s=String(p||""); const i=s.lastIndexOf("/"); return i>=0? s.slice(i+1): s; }
+function dirName(p){ const s=String(p||""); const i=s.lastIndexOf("/"); return i>=0? s.slice(0,i): ""; }
+function catTag(c){ return '<span class="tag '+catClass(c)+'">'+esc(c)+'</span>'; }
+function seasonLabel(s){ if(s===0) return "SP"; return s?("S"+String(s).padStart(2,"0")):"-"; }
+
+// ---------- 头部与 KPI ----------
+(function(){
+  document.getElementById("head-meta").innerHTML =
+    '<span>主机：'+esc(DATA.host)+'</span>'+
+    '<span>扫描时间：'+esc(DATA.scanned_at)+'</span>'+
+    '<span>报表生成：'+esc(DATA.generated_at)+'</span>'+
+    '<span>扫描范围：'+DATA.roots.map(esc).join("、")+'</span>';
+  const s=DATA.stats;
+  const kpis=[
+    ["作品总数", fmtNum(s.total_works), "电影 "+fmtNum(s.movie_works)+" / 剧集 "+fmtNum(s.series_works)],
+    ["视频文件", fmtNum(s.total_files), "总容量 "+fmtSize(s.total_size)],
+    ["剧集总集数", fmtNum(s.total_episodes), "电影平均 "+fmtSize(s.avg_movie_size)+"/部"],
+    ["单集平均", fmtSize(s.avg_episode_size), "剧集平均单集大小"],
+    ["缺集提示", fmtNum(s.missing_count), "见「缺集与异常」"],
+    ["字幕覆盖", (s.sub_cov_rate||0).toFixed(1)+"%", "含外挂字幕文件的视频（不含内嵌）"],
+  ];
+  document.getElementById("kpis").innerHTML = kpis.map(function(k){
+    return '<div class="kpi"><div class="label">'+k[0]+'</div><div class="value">'+k[1]+'</div><div class="sub">'+esc(k[2])+'</div></div>';
+  }).join("");
+  document.getElementById("kpis").insertAdjacentHTML("afterend",
+    '<div class="hint" style="margin:10px 2px 4px">口径说明：集数按剧集视频文件数统计（含 SP 特别篇）；字幕覆盖率仅统计与视频同名的外挂字幕文件，不含内嵌字幕轨；分辨率 / 编码 / 片源取自文件名标签，「未标注」表示文件名未含该类技术信息；缺集检测仅针对季号 ≥1 的常规季。</div>');
+  document.getElementById("foot").textContent = "飞牛 NAS 影音库统计 · 由 FnosMediaReporter 生成 · 数据来源："+DATA.host;
+})();
+
+// ---------- Tab ----------
+document.querySelectorAll(".tab").forEach(function(t){
+  t.onclick=function(){
+    document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
+    document.querySelectorAll(".panel").forEach(function(x){x.classList.remove("active");});
+    t.classList.add("active");
+    document.getElementById("panel-"+t.dataset.tab).classList.add("active");
+  };
+});
+
+// ---------- 分布表 ----------
+function renderBuckets(tableId, buckets, totalSize, emptyText, countLabel, sizeLabel){
+  const t=document.getElementById(tableId);
+  if(!buckets||!buckets.length){ t.innerHTML='<tr><td class="hint">'+(emptyText||"无数据")+'</td></tr>'; return; }
+  const max=Math.max.apply(null,buckets.map(function(b){return b.size||0;}))||1;
+  let html='<thead><tr><th class="nosort">项目</th><th class="nosort">'+(countLabel||"数量")+'</th><th class="nosort">'+(sizeLabel||"容量")+'</th><th class="nosort">占比</th></tr></thead><tbody>';
+  buckets.forEach(function(b){
+    const pct=totalSize? ((b.size/totalSize)*100):0;
+    html+='<tr><td>'+esc(b.name)+'</td><td>'+fmtNum(b.count)+'</td><td>'+fmtSize(b.size)+'</td>'+
+      '<td><div class="barwrap"><div class="fill" style="flex:0 0 60%"><span style="width:'+Math.max(2,(b.size/max)*100)+'%"></span></div>'+
+      '<span class="num">'+pct.toFixed(1)+'%</span></div></td></tr>';
+  });
+  t.innerHTML=html+'</tbody>';
+}
+(function(){
+  const s=DATA.stats;
+  renderBuckets("tbl-category", DATA.category_stats, s.total_size, null, "文件数", "文件容量");
+  renderBuckets("tbl-volume", DATA.volume_stats, s.total_size, null, "文件数", "文件容量");
+  renderBuckets("tbl-lib", DATA.lib_stats, s.total_size, null, "文件数", "文件容量");
+  renderBuckets("tbl-res", DATA.res_stats, s.total_size, null, "文件数", "文件容量");
+  renderBuckets("tbl-codec", DATA.codec_stats, s.total_size, null, "文件数", "文件容量");
+  renderBuckets("tbl-source", DATA.source_stats, s.total_size, null, "文件数", "文件容量");
+  renderBuckets("tbl-season", DATA.season_dist, s.total_size, null, "作品数", "该档容量");
+
+  let h='<thead><tr><th class="nosort">#</th><th class="nosort">作品</th><th class="nosort">集数</th><th class="nosort">容量</th></tr></thead><tbody>';
+  (DATA.top_big||[]).forEach(function(w,i){
+    h+='<tr><td>'+(i+1)+'</td><td>'+catTag(w.category)+' '+esc(w.title)+' <span class="hint">('+w.year+')</span></td><td>'+w.file_count+'</td><td>'+fmtSize(w.total_size)+'</td></tr>';
+  });
+  document.getElementById("tbl-top").innerHTML=h+'</tbody>';
+})();
+
+// ---------- 作品表 ----------
+const CATS=Array.from(new Set(DATA.works.map(function(w){return w.category;})));
+const VOLS=Array.from(new Set(DATA.files.map(function(f){return f.volume;}))).sort();
+CATS.forEach(function(c){ document.getElementById("w-cat").insertAdjacentHTML("beforeend",'<option>'+esc(c)+'</option>'); document.getElementById("e-cat").insertAdjacentHTML("beforeend",'<option>'+esc(c)+'</option>'); });
+VOLS.forEach(function(v){ document.getElementById("w-vol").insertAdjacentHTML("beforeend",'<option>'+esc(v)+'</option>'); });
+(DATA.res_stats||[]).forEach(function(r){ document.getElementById("e-res").insertAdjacentHTML("beforeend",'<option>'+esc(r.name)+'</option>'); });
+
+let wPage=1, wPageSize=60, wFiltered=[];
+function filterWorks(){
+  const q=document.getElementById("w-q").value.trim().toLowerCase();
+  const cat=document.getElementById("w-cat").value;
+  const kind=document.getElementById("w-kind").value;
+  const vol=document.getElementById("w-vol").value;
+  const issue=document.getElementById("w-issue").value;
+  const sort=document.getElementById("w-sort").value;
+  wFiltered=DATA.works.filter(function(w){
+    if(cat&&w.category!==cat) return false;
+    if(kind&&w.kind!==kind) return false;
+    if(vol&&w.volumes.indexOf(vol)<0) return false;
+    if(q){ const t=(w.title+" "+w.year).toLowerCase(); if(t.indexOf(q)<0) return false; }
+    if(issue==="missing"&&w.missing.length===0) return false;
+    if(issue==="dup"&&w.duplicates.length===0) return false;
+    if(issue==="anos"&&w.anomalies.length===0) return false;
+    if(issue==="nosub"&&w.sub_count>=w.file_count) return false;
+    return true;
+  });
+  if(sort==="size") wFiltered.sort(function(a,b){return b.total_size-a.total_size;});
+  else if(sort==="files") wFiltered.sort(function(a,b){return b.file_count-a.file_count;});
+  else if(sort==="year") wFiltered.sort(function(a,b){return b.year-a.year;});
+  else wFiltered.sort(function(a,b){return a.title.localeCompare(b.title,"zh");});
+  wPage=1;
+  renderWorks();
+}
+function renderWorks(){
+  const total=wFiltered.length;
+  const pages=Math.max(1,Math.ceil(total/wPageSize));
+  if(wPage>pages) wPage=pages;
+  const start=(wPage-1)*wPageSize;
+  const rows=wFiltered.slice(start,start+wPageSize);
+  let h='<thead><tr><th class="nosort">分类</th><th class="nosort">作品名</th><th class="nosort">年份</th><th class="nosort">类型</th>'+
+    '<th class="nosort">季</th><th class="nosort">集/文件</th><th class="nosort">容量</th><th class="nosort">放置位置</th><th class="nosort">字幕</th><th class="nosort">缺集/异常</th></tr></thead><tbody>';
+  rows.forEach(function(w,i){
+    const idx=start+i;
+    let issues=[];
+    if(w.missing.length) issues.push('<span class="tag warn">缺 '+w.missing.length+'</span>');
+    if(w.duplicates.length) issues.push('<span class="tag danger">重复</span>');
+    if(w.anomalies.length) issues.push('<span class="tag other">结构 '+w.anomalies.length+'</span>');
+    if(!issues.length) issues.push('<span class="tag ok">正常</span>');
+    h+='<tr class="wrow" data-idx="'+idx+'" style="cursor:pointer">'+
+      '<td>'+catTag(w.category)+'</td>'+
+      '<td><strong>'+esc(w.title)+'</strong></td>'+
+      '<td>'+w.year+'</td>'+
+      '<td>'+esc(w.kind)+'</td>'+
+      '<td>'+(w.kind==="电影"?"-":w.season_count)+'</td>'+
+      '<td>'+(w.kind==="电影"?w.file_count:w.episode_sum)+'</td>'+
+      '<td>'+fmtSize(w.total_size)+'</td>'+
+      '<td><span class="path">'+esc(w.volumes.join("/"))+' · '+esc(w.libraries.join("/"))+'</span></td>'+
+      '<td>'+w.sub_count+"/"+w.file_count+'</td>'+
+      '<td>'+issues.join(" ")+'</td></tr>';
+  });
+  if(!rows.length) h+='<tr><td class="hint" colspan="10">没有匹配的作品，请调整筛选条件</td></tr>';
+  document.getElementById("tbl-works").innerHTML=h+'</tbody>';
+  document.getElementById("w-count").textContent="共 "+total+" 部";
+  document.querySelectorAll(".wrow").forEach(function(tr){
+    tr.onclick=function(){ toggleExpand(tr, wFiltered[parseInt(tr.dataset.idx)]); };
+  });
+  // 分页
+  let p='<span>第 '+wPage+' / '+pages+' 页</span>';
+  p+='<button '+(wPage<=1?"disabled":"")+' id="w-prev">上一页</button><button '+(wPage>=pages?"disabled":"")+' id="w-next">下一页</button>';
+  document.getElementById("w-pager").innerHTML=p;
+  const bp=document.getElementById("w-prev"), bn=document.getElementById("w-next");
+  if(bp) bp.onclick=function(){ if(wPage>1){wPage--;renderWorks();} };
+  if(bn) bn.onclick=function(){ if(wPage<pages){wPage++;renderWorks();} };
+}
+function toggleExpand(tr, w){
+  const next=tr.nextElementSibling;
+  if(next&&next.classList.contains("expand")){ next.remove(); return; }
+  const files=(w.file_idx||[]).map(function(i){return DATA.files[i];}).sort(function(a,b){ if(a.season!==b.season) return a.season-b.season; return a.episode-b.episode; });
+  let h='<tr class="expand"><td colspan="10"><div class="sub">';
+  h+='<div class="hint" style="margin-bottom:8px">收录目录：'+w.dirs.map(esc).join("　|　")+'</div>';
+  if(w.missing.length) h+='<div class="miss" style="margin-bottom:8px">缺集：'+w.missing.map(esc).join("；")+'</div>';
+  if(w.duplicates.length) h+='<div class="miss" style="margin-bottom:8px">重复：'+w.duplicates.map(esc).join("；")+'</div>';
+  if(w.anomalies.length) h+='<div class="hint" style="margin-bottom:8px">结构：'+w.anomalies.map(esc).join("；")+'</div>';
+  h+='<table><thead><tr><th class="nosort">季</th><th class="nosort">集</th><th class="nosort">单集标题</th><th class="nosort">大小</th><th class="nosort">规格</th><th class="nosort">字幕</th><th class="nosort">文件</th></tr></thead><tbody>';
+  files.forEach(function(f){
+    h+='<tr><td>'+seasonLabel(f.season)+'</td>'+
+      '<td>'+(f.episode?("E"+String(f.episode).padStart(2,"0")):"-")+'</td>'+
+      '<td>'+esc(f.episode_title||"")+'</td>'+
+      '<td>'+fmtSize(f.size)+'</td>'+
+      '<td>'+(esc([f.resolution,f.source,f.codec,f.audio,f.dynamic].filter(Boolean).join(" / "))||"<span class=hint>未标注</span>")+'</td>'+
+      '<td>'+(f.has_subtitle?'<span class="tag ok">有</span>':'<span class="tag warn">无</span>')+'</td>'+
+      '<td class="mono">'+esc(baseName(f.path))+'</td></tr>';
+  });
+  h+='</tbody></table></div></td></tr>';
+  tr.insertAdjacentHTML("afterend",h);
+}
+["w-q","w-cat","w-kind","w-vol","w-issue","w-sort"].forEach(function(id){
+  document.getElementById(id).addEventListener(id==="w-q"?"input":"change", filterWorks);
+});
+filterWorks();
+</script>
+
+<script>
+// ---------- 剧集（文件级）表 ----------
+let ePage=1, ePageSize=100, eFiltered=[];
+function filterEps(){
+  const q=document.getElementById("e-q").value.trim().toLowerCase();
+  const cat=document.getElementById("e-cat").value;
+  const res=document.getElementById("e-res").value;
+  const sub=document.getElementById("e-sub").value;
+  eFiltered=DATA.files.filter(function(f){
+    if(cat&&f.category!==cat) return false;
+    if(res&&(f.resolution||"未标注")!==res) return false;
+    if(sub==="1"&&!f.has_subtitle) return false;
+    if(sub==="0"&&f.has_subtitle) return false;
+    if(q){ const t=(f.title+" "+f.episode_title+" "+f.path).toLowerCase(); if(t.indexOf(q)<0) return false; }
+    return true;
+  });
+  ePage=1; renderEps();
+}
+function renderEps(){
+  const total=eFiltered.length, pages=Math.max(1,Math.ceil(total/ePageSize));
+  if(ePage>pages) ePage=pages;
+  const start=(ePage-1)*ePageSize, rows=eFiltered.slice(start,start+ePageSize);
+  let h='<thead><tr><th class="nosort">分类</th><th class="nosort">作品</th><th class="nosort">季集</th><th class="nosort">单集标题</th>'+
+    '<th class="nosort">大小</th><th class="nosort">分辨率</th><th class="nosort">编码</th><th class="nosort">来源</th><th class="nosort">字幕</th><th class="nosort">路径</th></tr></thead><tbody>';
+  rows.forEach(function(f){
+    h+='<tr><td>'+catTag(f.category)+'</td><td>'+esc(f.title)+' <span class="hint">('+f.year+')</span></td>'+
+      '<td>'+seasonLabel(f.season)+(f.episode?("E"+String(f.episode).padStart(2,"0")):"")+'</td>'+
+      '<td>'+esc(f.episode_title||"")+'</td><td>'+fmtSize(f.size)+'</td>'+
+      '<td>'+esc(f.resolution||"-")+'</td><td>'+esc(f.codec||"-")+'</td><td>'+esc(f.source||"-")+'</td>'+
+      '<td>'+(f.has_subtitle?'<span class="tag ok">有</span>':'<span class="tag warn">无</span>')+'</td>'+
+      '<td class="path">'+esc(f.path)+'</td></tr>';
+  });
+  if(!rows.length) h+='<tr><td class="hint" colspan="10">没有匹配的文件，请调整筛选条件</td></tr>';
+  document.getElementById("tbl-eps").innerHTML=h+'</tbody>';
+  document.getElementById("e-count").textContent="共 "+fmtNum(total)+" 个文件";
+  let p='<span>第 '+ePage+' / '+pages+' 页</span><button id="e-prev" '+(ePage<=1?"disabled":"")+'>上一页</button><button id="e-next" '+(ePage>=pages?"disabled":"")+'>下一页</button>';
+  document.getElementById("e-pager").innerHTML=p;
+  const bp=document.getElementById("e-prev"), bn=document.getElementById("e-next");
+  if(bp) bp.onclick=function(){ if(ePage>1){ePage--;renderEps();} };
+  if(bn) bn.onclick=function(){ if(ePage<pages){ePage++;renderEps();} };
+}
+["e-q","e-cat","e-res","e-sub"].forEach(function(id){
+  document.getElementById(id).addEventListener(id==="e-q"?"input":"change", filterEps);
+});
+filterEps();
+
+// ---------- 放置位置 ----------
+(function(){
+  const byVol={};
+  DATA.works.forEach(function(w){
+    w.volumes.forEach(function(v){
+      if(!byVol[v]) byVol[v]={works:0,files:0,size:0,libs:{}};
+      byVol[v].works++; byVol[v].files+=w.file_count; byVol[v].size+=w.total_size;
+      w.libraries.forEach(function(l){ byVol[v].libs[l]=(byVol[v].libs[l]||0)+1; });
+    });
+  });
+  let html="";
+  Object.keys(byVol).sort().forEach(function(v){
+    const d=byVol[v];
+    html+='<div class="card" style="margin:10px 0"><h3>'+esc(v)+' <span class="hint">作品 '+d.works+' 部 · 文件 '+fmtNum(d.files)+' 个 · '+fmtSize(d.size)+'</span></h3>';
+    html+='<table><thead><tr><th class="nosort">媒体库</th><th class="nosort">作品数</th></tr></thead><tbody>';
+    Object.keys(d.libs).sort().forEach(function(l){ html+='<tr><td>'+esc(l)+'</td><td>'+d.libs[l]+'</td></tr>'; });
+    html+='</tbody></table>';
+    const ws=DATA.works.filter(function(w){return w.volumes.indexOf(v)>=0;});
+    const multi=ws.filter(function(w){return w.dirs.length>1;});
+    if(multi.length){
+      html+='<div class="hint" style="margin-top:8px">跨目录存放的作品 '+multi.length+" 部："+multi.slice(0,8).map(function(w){return esc(w.title);}).join("、")+(multi.length>8?" 等":"")+'</div>';
+    }
+    html+='</div>';
+  });
+  document.getElementById("loc-tree").innerHTML=html;
+})();
+
+// ---------- 异常 ----------
+(function(){
+  const kinds=Array.from(new Set(DATA.anomaly_list.map(function(a){return a.kind;})));
+  kinds.forEach(function(k){ document.getElementById("i-kind").insertAdjacentHTML("beforeend",'<option>'+esc(k)+'</option>'); });
+  function render(){
+    const lvl=document.getElementById("i-level").value;
+    const kind=document.getElementById("i-kind").value;
+    const rows=DATA.anomaly_list.filter(function(a){
+      if(lvl&&a.level!==lvl) return false;
+      if(kind&&a.kind!==kind) return false;
+      return true;
+    });
+    let h='<thead><tr><th class="nosort">级别</th><th class="nosort">类型</th><th class="nosort">作品</th><th class="nosort">详情</th></tr></thead><tbody>';
+    rows.slice(0,2000).forEach(function(a){
+      h+='<tr><td>'+(a.level==="warn"?'<span class="tag warn">需关注</span>':'<span class="tag other">提示</span>')+'</td>'+
+        '<td>'+esc(a.kind)+'</td><td>'+esc(a.title)+'</td><td>'+esc(a.detail)+'</td></tr>';
+    });
+    if(!rows.length) h+='<tr><td class="hint" colspan="4">当前筛选条件下无异常</td></tr>';
+    document.getElementById("tbl-issues").innerHTML=h+'</tbody>';
+    document.getElementById("i-count").textContent="共 "+rows.length+" 条"+(rows.length>2000?"（仅显示前 2000 条）":"");
+  }
+  document.getElementById("i-level").onchange=render;
+  document.getElementById("i-kind").onchange=render;
+  render();
+})();
+
+// ---------- 最近入库 ----------
+(function(){
+  let h='<thead><tr><th class="nosort">分类</th><th class="nosort">作品</th><th class="nosort">季集</th><th class="nosort">大小</th><th class="nosort">入库时间</th><th class="nosort">路径</th></tr></thead><tbody>';
+  (DATA.recent||[]).forEach(function(f){
+    h+='<tr><td>'+catTag(f.category)+'</td><td>'+esc(f.title)+'</td>'+
+      '<td>'+seasonLabel(f.season)+(f.episode?("E"+String(f.episode).padStart(2,"0")):"")+'</td>'+
+      '<td>'+fmtSize(f.size)+'</td><td>'+(f.mod_time||"").replace("T"," ").slice(0,16)+'</td>'+
+      '<td class="path">'+esc(f.path)+'</td></tr>';
+  });
+  document.getElementById("tbl-recent").innerHTML=h+'</tbody>';
+})();
+
+// ---------- CSV 导出（前端生成） ----------
+function downloadCSV(name, rows){
+  const csv=rows.map(function(r){ return r.map(function(c){ const s=(c===null||c===undefined)?"":String(c); return '"'+s.replace(/"/g,'""')+'"'; }).join(","); }).join("\r\n");
+  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);},2000);
+}
+document.getElementById("btn-export-w").onclick=function(){
+  const rows=[["分类","类型","作品名","年份","季数","集数/文件数","容量(GB)","所在卷","媒体库","字幕覆盖","缺集","重复","结构异常"]];
+  wFiltered.forEach(function(w){
+    rows.push([w.category,w.kind,w.title,w.year,w.season_count,w.file_count,(w.total_size/1073741824).toFixed(2),
+      w.volumes.join("/"),w.libraries.join("/"),w.sub_count+"/"+w.file_count,
+      w.missing.join("; "),w.duplicates.join("; "),w.anomalies.join("; ")]);
+  });
+  downloadCSV("作品清单.csv",rows);
+};
+document.getElementById("btn-export-e").onclick=function(){
+  const rows=[["分类","类型","作品","年份","季","集","单集标题","大小(GB)","分辨率","编码","来源","音轨","HDR","字幕","路径","修改时间"]];
+  eFiltered.forEach(function(f){
+    rows.push([f.category,f.kind,f.title,f.year,f.season,f.episode,f.episode_title,(f.size/1073741824).toFixed(2),
+      f.resolution,f.codec,f.source,f.audio,f.dynamic,f.has_subtitle?"有":"无",f.path,(f.mod_time||"").replace("T"," ").slice(0,16)]);
+  });
+  downloadCSV("文件清单.csv",rows);
+};
+</script>
+</body>
+</html>
