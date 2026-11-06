@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 2f12ef080060517e9dd433d82e19a198_8ab2e66ed9a611f19232525400248c00
+    ReservedCode1: eREL7XwwUytyJTbaKYtkb0KW4i3NDuxbFOEeRGla6ySbsoJ8qvHABXguAVtCan0mIlEpsXQsyZWR5Wo//Ad3XBCzorcfmWPojl+XyGYeq3e6q+uGetxni9g+L9h8MWvVy/37oKkESQ5CYlghtWqlT9o6pX92idqb3La/+EFSAEpRVlZO2piUlWuc2ro=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 2f12ef080060517e9dd433d82e19a198_8ab2e66ed9a611f19232525400248c00
+    ReservedCode2: eREL7XwwUytyJTbaKYtkb0KW4i3NDuxbFOEeRGla6ySbsoJ8qvHABXguAVtCan0mIlEpsXQsyZWR5Wo//Ad3XBCzorcfmWPojl+XyGYeq3e6q+uGetxni9g+L9h8MWvVy/37oKkESQ5CYlghtWqlT9o6pX92idqb3La/+EFSAEpRVlZO2piUlWuc2ro=
+---
+
 # 飞牛 fnOS 安装、授权与排障
 
 本文对应 `fnos` 分支的 fpk 应用（应用名 `mediareporter`，服务端口 `8090`）。
@@ -70,3 +81,4 @@ curl "http://127.0.0.1:8090/api/browse?path=/vol1/1000"
 - 构建机（Linux / WSL / NAS 本机）需 Go 1.21+ 与 Python 3；
 - 交叉编译使用 `CGO_ENABLED=0`，产物为静态二进制，可直接在 fnOS 上运行；
 - 打包脚本 `tools/package.py` 不依赖 `fnpack`，按 fpk 规范手工组装 `manifest + app.tgz + cmd/ + config/ + 图标`。
+*（内容由AI生成，仅供参考）*

@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 2f12ef080060517e9dd433d82e19a198_895a4214d9a611f19280525400393706
+    ReservedCode1: mAsQkC5qpQQmOSnNyAVNrziqg3hn3W9iYQCb/+qmN+dLT+BKmiqqsGfpbDPddvKl9+tejmeztAPjXhtqDGlUMASiSwJYYJhoYS7qVA16hoco28TyD2HuHzimPSCbYh+zZtJkuVIEciU1eBVTwsWNSr6wjv61BEibyp8w9l7n8Cx7h4U7TjgNyqrlaDQ=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 2f12ef080060517e9dd433d82e19a198_895a4214d9a611f19280525400393706
+    ReservedCode2: mAsQkC5qpQQmOSnNyAVNrziqg3hn3W9iYQCb/+qmN+dLT+BKmiqqsGfpbDPddvKl9+tejmeztAPjXhtqDGlUMASiSwJYYJhoYS7qVA16hoco28TyD2HuHzimPSCbYh+zZtJkuVIEciU1eBVTwsWNSr6wjv61BEibyp8w9l7n8Cx7h4U7TjgNyqrlaDQ=
+---
+
 # 飞牛 NAS 影音库统计（fnOS fpk 版）
 
 在飞牛 fnOS 上以**应用（fpk）**形式安装运行，由 NAS 本机只读扫描 `/vol*` 下的影视目录，生成一份自包含的影音库统计报表：作品数、容量、分类、卷分布、分辨率/编码/来源构成、季集结构、缺集与重复文件、字幕覆盖等。
@@ -125,3 +136,4 @@ python3 tools/package.py amd64
 ## License
 
 [MIT](LICENSE)
+*（内容由AI生成，仅供参考）*
