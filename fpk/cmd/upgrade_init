@@ -1,0 +1,6 @@
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${DIR}/common"
+log "升级前停止服务"
+stop_daemon
+exit 0

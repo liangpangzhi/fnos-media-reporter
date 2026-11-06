@@ -1,0 +1,8 @@
+#!/bin/bash
+# 兼容 fnOS 规范的服务变量（main 已直接控制进程，此文件仅作声明）
+APPNAME="${TRIM_APPNAME:-mediareporter}"
+APPDEST="${TRIM_APPDEST:-$(cd "$(dirname "$0")/.." && pwd)}"
+PKGVAR="${TRIM_PKGVAR:-/tmp/${APPNAME}}"
+SERVICE_COMMAND="${APPDEST}/bin/media-reporter -port 8090 -data ${PKGVAR}/data"
+SVC_BACKGROUND=y
+SVC_WRITE_PID=y

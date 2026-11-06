@@ -1,0 +1,15 @@
+{
+    ".url": {
+        "mediareporter.Application":
+        {
+            "title": "影音库统计",
+            "desc": "NAS 影音库统计报表",
+            "icon": "images/icon_{0}.png",
+            "type": "url",
+            "port": "8090",
+            "protocol": "http",
+            "url": "/",
+            "allUsers": true
+        }
+    }
+}

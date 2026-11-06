@@ -1,0 +1,33 @@
+#!/bin/bash
+# 生命周期入口：start / stop / status
+DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${DIR}/common"
+
+case "$1" in
+    start)
+        do_start
+        exit $?
+        ;;
+    stop)
+        do_stop
+        exit 0
+        ;;
+    status)
+        if daemon_status; then
+            echo "${APPNAME} is running"
+            exit 0
+        else
+            echo "${APPNAME} is not running"
+            exit 3
+        fi
+        ;;
+    restart)
+        do_stop
+        do_start
+        exit $?
+        ;;
+    *)
+        echo "usage: $0 {start|stop|status|restart}"
+        exit 1
+        ;;
+esac

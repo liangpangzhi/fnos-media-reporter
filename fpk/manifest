@@ -1,0 +1,16 @@
+appname         = mediareporter
+version         = 1.0.2
+display_name    = 影音库统计
+platform        = x86
+maintainer      = liangpangzhi
+maintainer_url  = https://github.com/liangpangzhi/fnos-media-reporter
+distributor     = liangpangzhi
+distributor_url = https://github.com/liangpangzhi/fnos-media-reporter
+desktop_uidir   = ui
+desktop_applaunchname = mediareporter.Application
+service_port    = 8090
+desc            = 在飞牛 NAS 本地只读扫描影音库，生成作品清单、缺集/重复检测、分辨率与编码分布等统计报表。
+source          = thirdparty
+ctl_stop        = true
+checkport       = false
+disable_authorization_path = false

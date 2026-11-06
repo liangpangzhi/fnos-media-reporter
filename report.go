@@ -13,9 +13,6 @@ import (
 	"time"
 )
 
-//go:embed assets/report.html.tmpl
-var reportTmplStr string
-
 func nowStr() string {
 	return time.Now().Format("2006-01-02 15:04:05")
 }

@@ -1,0 +1,16 @@
+{
+  "port-config": {
+    "protocol-file": "MediaReporter.sc"
+  },
+  "data-share": {
+    "shares": [
+      {
+        "name": "mediareporter"
+      },
+      {
+        "name": "mediareporter/data"
+      }
+    ]
+  },
+  "systemd-unit": {}
+}

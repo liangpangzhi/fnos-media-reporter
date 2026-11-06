@@ -1,337 +1,319 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
+	"flag"
+	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
+	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	webview "github.com/jchv/go-webview2"
 )
 
-// App 应用状态
-type App struct {
-	mu      sync.Mutex
-	status  *ScanStatus
-	report  string
-	summary *Summary
-	csv     []string
-	busy    bool
-}
+//go:embed assets/app.html
+var appHTML string
 
-// exeDirPath 返回可执行文件所在目录，用于存放 settings.json 与 reports 目录。
-func exeDirPath() string {
-	exe, err := os.Executable()
-	if err != nil {
-		wd, _ := os.Getwd()
-		return wd
-	}
-	return filepath.Dir(exe)
-}
+//go:embed assets/report.html.tmpl
+var reportTmplStr string
 
-func outDir() string {
-	d := filepath.Join(exeDirPath(), "reports")
-	if err := os.MkdirAll(d, 0o755); err != nil {
-		base := os.Getenv("LOCALAPPDATA")
-		if base == "" {
-			base = os.TempDir()
-		}
-		d = filepath.Join(base, "FnosMediaReporter", "reports")
-		os.MkdirAll(d, 0o755)
-	}
-	return d
-}
+var (
+	dataDir   string
+	reportDir string
+	cfgPath   string
 
-// Settings 界面设置（密码单独可选保存）
+	repMu      sync.RWMutex
+	lastHTML   string
+	lastReport string
+)
+
 type Settings struct {
-	Host    string `json:"host"`
-	Port    int    `json:"port"`
-	User    string `json:"user"`
-	Roots   string `json:"roots"`
-	SavePID bool   `json:"savePwd"`
-	Keyword string `json:"keyword"`
+	Roots []string `json:"roots"`
 }
 
-func settingsPath() string { return filepath.Join(exeDirPath(), "settings.json") }
-
-func loadSettings() Settings {
-	s := Settings{Port: 22, SavePID: false}
-	b, err := os.ReadFile(settingsPath())
-	if err == nil {
-		json.Unmarshal(b, &s)
+func envOr(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
 	}
-	if s.Port == 0 {
-		s.Port = 22
-	}
-	return s
+	return def
 }
 
-func saveSettings(s Settings) error {
-	b, _ := json.MarshalIndent(s, "", "  ")
-	return os.WriteFile(settingsPath(), b, 0o600)
+func main() {
+	port := flag.Int("port", 8090, "监听端口")
+	data := flag.String("data", "", "数据目录")
+	flag.Parse()
+
+	if *data != "" {
+		dataDir = *data
+	} else if v := os.Getenv("TRIM_PKGVAR"); v != "" {
+		dataDir = v
+	} else {
+		exe, _ := os.Executable()
+		dataDir = filepath.Join(filepath.Dir(exe), "data")
+	}
+	reportDir = filepath.Join(dataDir, "reports")
+	cfgPath = filepath.Join(dataDir, "settings.json")
+	if err := os.MkdirAll(reportDir, 0o755); err != nil {
+		log.Fatalf("创建数据目录失败: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handleIndex)
+	mux.HandleFunc("/api/env", handleEnv)
+	mux.HandleFunc("/api/settings", handleSettings)
+	mux.HandleFunc("/api/browse", handleBrowse)
+	mux.HandleFunc("/api/scan", handleScan)
+	mux.HandleFunc("/api/status", handleStatus)
+	mux.HandleFunc("/api/report", handleReport)
+	mux.HandleFunc("/api/reports", handleReports)
+	mux.HandleFunc("/api/download", handleDownload)
+	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]interface{}{"ok": true, "version": appVersion})
+	})
+
+	addr := fmt.Sprintf(":%d", *port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("端口 %d 监听失败: %v", *port, err)
+	}
+	log.Printf("影音库统计启动于 %s，数据目录 %s", addr, dataDir)
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 15 * time.Second}
+	if err := srv.Serve(ln); err != nil {
+		log.Fatal(err)
+	}
 }
+
+const appVersion = "1.0.2"
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(v)
 }
 
-func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	io.WriteString(w, a.status.Snapshot())
-}
-
-type scanReq struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	Roots    string `json:"roots"`
-	SavePID  bool   `json:"savePwd"`
-}
-
-func (a *App) handleTest(w http.ResponseWriter, r *http.Request) {
-	var req scanReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, map[string]string{"error": "参数解析失败"})
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" && r.URL.Path != "/index.html" {
+		http.NotFound(w, r)
 		return
 	}
-	roots := parseRoots(req.Roots)
-	opts := SSHOptions{Host: req.Host, Port: req.Port, User: req.User, Password: req.Password}
-	res, err := TestConnection(opts, roots)
-	if err != nil {
-		writeJSON(w, map[string]string{"error": err.Error()})
-		return
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	io.WriteString(w, res)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	io.WriteString(w, appHTML)
 }
 
-func parseRoots(s string) []string {
-	raw := strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ';' || r == '\n' || r == ' ' })
-	out := make([]string, 0, len(raw))
-	for _, v := range raw {
-		v = strings.TrimSpace(v)
-		if v != "" {
-			out = append(out, v)
+// handleEnv 返回卷列表与数据目录
+func handleEnv(w http.ResponseWriter, r *http.Request) {
+	type vol struct {
+		Path  string `json:"path"`
+		Label string `json:"label"`
+	}
+	var vols []vol
+	for i := 1; i <= 32; i++ {
+		p := fmt.Sprintf("/vol%d", i)
+		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+			vols = append(vols, vol{Path: p, Label: filepath.Base(p)})
 		}
+	}
+	writeJSON(w, map[string]interface{}{
+		"volumes":   vols,
+		"data_dir":  dataDir,
+		"report_dir": reportDir,
+		"version":   appVersion,
+		"arch":      archName(),
+	})
+}
+
+func loadSettings() Settings {
+	var s Settings
+	if b, err := os.ReadFile(cfgPath); err == nil {
+		json.Unmarshal(b, &s)
+	}
+	if len(s.Roots) == 0 {
+		s.Roots = detectDefaultRoots()
+	}
+	return s
+}
+
+// detectDefaultRoots 自动探测最常见的媒体目录 /volN/1000
+func detectDefaultRoots() []string {
+	var out []string
+	for i := 1; i <= 32; i++ {
+		p := fmt.Sprintf("/vol%d/1000", i)
+		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		out = []string{"/vol1"}
 	}
 	return out
 }
 
-func (a *App) handleScan(w http.ResponseWriter, r *http.Request) {
-	var req scanReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, map[string]string{"error": "参数解析失败"})
+func handleSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var s Settings
+		if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
+			writeJSON(w, map[string]string{"error": "参数错误: " + err.Error()})
+			return
+		}
+		var clean []string
+		for _, x := range s.Roots {
+			x = strings.TrimSpace(x)
+			if x != "" {
+				clean = append(clean, x)
+			}
+		}
+		s.Roots = clean
+		b, _ := json.MarshalIndent(s, "", "  ")
+		if err := os.WriteFile(cfgPath, b, 0o644); err != nil {
+			writeJSON(w, map[string]string{"error": "保存失败: " + err.Error()})
+			return
+		}
+		writeJSON(w, map[string]interface{}{"ok": true, "roots": s.Roots})
 		return
 	}
-	roots := parseRoots(req.Roots)
-	if len(roots) == 0 {
-		writeJSON(w, map[string]string{"error": "请至少填写一个扫描根目录"})
-		return
-	}
-	if req.Host == "" || req.User == "" {
-		writeJSON(w, map[string]string{"error": "主机地址和用户名不能为空"})
-		return
-	}
+	writeJSON(w, loadSettings())
+}
 
-	a.mu.Lock()
-	if a.busy {
-		a.mu.Unlock()
+// handleBrowse 只读列目录，限制在 /vol* 之下
+func handleBrowse(w http.ResponseWriter, r *http.Request) {
+	dir := r.URL.Query().Get("path")
+	if dir == "" {
+		dir = "/"
+	}
+	dir = filepath.Clean(dir)
+	if dir != "/" && !strings.HasPrefix(dir, "/vol") {
+		writeJSON(w, map[string]string{"error": "仅允许浏览 /vol* 目录"})
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		writeJSON(w, map[string]string{"error": "读取失败（可能未授权）：" + err.Error()})
+		return
+	}
+	type item struct {
+		Name  string `json:"name"`
+		Path  string `json:"path"`
+		Media bool   `json:"media"`
+	}
+	var items []item
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if strings.HasPrefix(e.Name(), ".") || strings.HasPrefix(e.Name(), "@") {
+			continue
+		}
+		p := filepath.Join(dir, e.Name())
+		items = append(items, item{Name: e.Name(), Path: p, Media: isMediaDir(p)})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	writeJSON(w, map[string]interface{}{"path": dir, "items": items})
+}
+
+// isMediaDir 判断目录内是否直接含影音文件（用于前端高亮）
+func isMediaDir(dir string) bool {
+	f, err := os.Open(dir)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	names, _ := f.Readdirnames(80)
+	for _, n := range names {
+		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(n), "."))
+		for _, v := range videoExts {
+			if ext == v {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func handleScan(w http.ResponseWriter, r *http.Request) {
+	var req Settings
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, map[string]string{"error": "参数错误: " + err.Error()})
+		return
+	}
+	if len(req.Roots) == 0 {
+		req.Roots = loadSettings().Roots
+	}
+	if !st.tryStart() {
 		writeJSON(w, map[string]string{"error": "已有采集任务在运行"})
 		return
 	}
-	a.busy = true
-	a.mu.Unlock()
-
-	a.status.reset()
-	opts := SSHOptions{Host: req.Host, Port: req.Port, User: req.User, Password: req.Password}
-
-	// 保存设置
-	st := Settings{Host: req.Host, Port: req.Port, User: req.User, Roots: req.Roots, SavePID: req.SavePID}
-	saveSettings(st)
-
-	go func() {
-		defer func() {
-			a.mu.Lock()
-			a.busy = false
-			a.mu.Unlock()
-			if p := recover(); p != nil {
-				a.status.SetErr("内部异常: " + toStr(p))
-			}
-		}()
-
-		inv, err := CollectInventory(opts, roots, a.status)
-		if err != nil {
-			return
-		}
-
-		a.status.Set("analyzing", "正在解析与统计 ...")
-		a.status.Log("开始解析片名、季集与规格信息")
-		sum := Analyze(inv, inv.SubFiles)
-		a.status.Log("统计完成，正在生成报表 ...")
-
-		html, err := RenderHTMLString(sum)
-		if err != nil {
-			a.status.SetErr("报表生成失败: " + err.Error())
-			return
-		}
-
-		a.mu.Lock()
-		a.report = html
-		a.summary = sum
-		a.mu.Unlock()
-
-		// 同时落盘一份 HTML 与 CSV
-		base := "影音库统计_" + time.Now().Format("20060102_150405")
-		htmlPath := filepath.Join(outDir(), base+".html")
-		os.WriteFile(htmlPath, []byte(html), 0o644)
-		csvFiles, _ := ExportCSV(sum, outDir(), base)
-
-		a.mu.Lock()
-		a.csv = append([]string{htmlPath}, csvFiles...)
-		a.mu.Unlock()
-
-		a.status.Set("done", "采集完成，已生成报表")
-		a.status.Log("报表已生成：" + htmlPath)
-	}()
-
-	writeJSON(w, map[string]string{"ok": "started"})
+	go runScan(req.Roots)
+	writeJSON(w, map[string]interface{}{"ok": true})
 }
 
-func (a *App) handleReport(w http.ResponseWriter, r *http.Request) {
-	a.mu.Lock()
-	h := a.report
-	a.mu.Unlock()
-	if h == "" {
-		http.Error(w, "报表尚未生成", 404)
-		return
+func handleStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, st.snapshot())
+}
+
+func handleReport(w http.ResponseWriter, r *http.Request) {
+	repMu.RLock()
+	html := lastHTML
+	repMu.RUnlock()
+	if html == "" {
+		html = strings.Replace(reportTmplStr, "{{.Data}}", "{}", 1)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	io.WriteString(w, h)
+	io.WriteString(w, html)
 }
 
-func (a *App) handleFiles(w http.ResponseWriter, r *http.Request) {
-	a.mu.Lock()
-	files := append([]string{}, a.csv...)
-	a.mu.Unlock()
-	writeJSON(w, map[string]interface{}{"files": files, "dir": outDir()})
-}
-
-func (a *App) handleOpenDir(w http.ResponseWriter, r *http.Request) {
-	exec.Command("explorer.exe", outDir()).Start()
-	writeJSON(w, map[string]string{"ok": "opened"})
-}
-
-func toStr(v interface{}) string {
-	b, _ := json.Marshal(v)
-	return string(b)
-}
-
-func openBrowser(url string) {
-	exec.Command("cmd", "/c", "start", "", url).Start()
-}
-
-func main() {
-	app := &App{status: NewScanStatus()}
-
-	listenPort := 0
-	noWin := false
-	for i, a := range os.Args {
-		if a == "-port" && i+1 < len(os.Args) {
-			listenPort, _ = strconv.Atoi(os.Args[i+1])
-		}
-		if a == "-nowin" {
-			noWin = true
-		}
-	}
-
-	ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(listenPort))
+// handleReports 列出已生成的报表文件
+func handleReports(w http.ResponseWriter, r *http.Request) {
+	entries, err := os.ReadDir(reportDir)
 	if err != nil {
-		os.Exit(1)
+		writeJSON(w, map[string]interface{}{"files": []interface{}{}})
+		return
 	}
-	port := ln.Addr().(*net.TCPAddr).Port
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/status", app.handleStatus)
-	mux.HandleFunc("/api/test", app.handleTest)
-	mux.HandleFunc("/api/scan", app.handleScan)
-	mux.HandleFunc("/api/report", app.handleReport)
-	mux.HandleFunc("/api/files", app.handleFiles)
-	mux.HandleFunc("/api/opendir", app.handleOpenDir)
-	mux.HandleFunc("/api/mtu", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		io.WriteString(w, mtuJSON())
-	})
-	mux.HandleFunc("/api/fixmtu", func(w http.ResponseWriter, r *http.Request) {
-		msg, err := FixMTU()
+	type f struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+		Time string `json:"time"`
+		URL  string `json:"url"`
+	}
+	var out []f
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
 		if err != nil {
-			writeJSON(w, map[string]string{"error": err.Error()})
-			return
+			continue
 		}
-		writeJSON(w, map[string]string{"ok": msg})
-	})
-	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			var s Settings
-			json.NewDecoder(r.Body).Decode(&s)
-			saveSettings(s)
-			writeJSON(w, map[string]string{"ok": "saved"})
-			return
-		}
-		writeJSON(w, loadSettings())
-	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		io.WriteString(w, appHTML)
-	})
-
-	go http.Serve(ln, mux)
-
-	url := "http://127.0.0.1:" + strconv.Itoa(port) + "/"
-
-	if noWin {
-		select {}
+		out = append(out, f{
+			Name: e.Name(),
+			Size: info.Size(),
+			Time: info.ModTime().Format("2006-01-02 15:04:05"),
+			URL:  "/api/download?f=" + e.Name(),
+		})
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Time > out[j].Time })
+	writeJSON(w, map[string]interface{}{"files": out})
+}
 
-	ok := true
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				ok = false
-			}
-		}()
-		w := webview.New(false)
-		if w == nil {
-			ok = false
-			return
-		}
-		defer w.Destroy()
-		w.SetTitle("飞牛 NAS 影音库统计")
-		w.SetSize(1360, 900, webview.HintNone)
-		w.Navigate(url)
-		w.Run()
-	}()
-
-	if !ok {
-		// WebView2 不可用时退回系统浏览器（Edge --app 无地址栏窗口）
-		edge := `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`
-		if _, err := os.Stat(edge); err == nil {
-			exec.Command(edge, "--app="+url, "--window-size=1360,900").Start()
-		} else {
-			openBrowser(url)
-		}
-		select {}
+func handleDownload(w http.ResponseWriter, r *http.Request) {
+	name := filepath.Base(r.URL.Query().Get("f"))
+	if name == "" || name == "." || strings.Contains(name, "..") {
+		http.Error(w, "参数错误", 400)
+		return
 	}
+	p := filepath.Join(reportDir, name)
+	if _, err := os.Stat(p); err != nil {
+		http.Error(w, "文件不存在", 404)
+		return
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+name+"\"")
+	http.ServeFile(w, r, p)
+}
+
+func archName() string {
+	return fmt.Sprintf("%s/%s", osGOOS(), osGOARCH())
 }

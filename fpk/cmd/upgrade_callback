@@ -1,0 +1,6 @@
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${DIR}/common"
+chmod +x "${BIN}" 2>/dev/null
+log "升级完成：${APPNAME}"
+exit 0

@@ -1,0 +1,81 @@
+#!/bin/bash
+# 通用函数：路径、进程控制、日志
+
+APPNAME="${TRIM_APPNAME:-mediareporter}"
+PKGVAR="${TRIM_PKGVAR:-/tmp/${APPNAME}}"
+if [ -n "${TRIM_APPDEST}" ]; then
+    APPDEST="${TRIM_APPDEST}"
+else
+    APPDEST="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)"
+fi
+
+PORT=8090
+BIN="${APPDEST}/bin/media-reporter"
+
+/bin/mkdir -p "${PKGVAR}" 2>/dev/null
+LOG_FILE="${PKGVAR}/${APPNAME}.log"
+PID_FILE="${PKGVAR}/${APPNAME}.pid"
+DATA_DIR="${PKGVAR}/data"
+
+log() {
+    echo "$(date +'%Y-%m-%d %H:%M:%S')  $*" >> "${LOG_FILE}"
+}
+
+daemon_status() {
+    if [ -r "${PID_FILE}" ]; then
+        pid=$(cat "${PID_FILE}" 2>/dev/null)
+        if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+            return 0
+        fi
+        /bin/rm -f "${PID_FILE}"
+    fi
+    return 1
+}
+
+start_daemon() {
+    if [ ! -x "${BIN}" ]; then
+        chmod +x "${BIN}" 2>/dev/null
+    fi
+    if [ ! -f "${BIN}" ]; then
+        log "启动失败：找不到可执行文件 ${BIN}"
+        return 1
+    fi
+    /bin/mkdir -p "${DATA_DIR}"
+    log "启动 ${APPNAME}，端口 ${PORT}，数据目录 ${DATA_DIR}"
+    nohup "${BIN}" -port "${PORT}" -data "${DATA_DIR}" >> "${LOG_FILE}" 2>&1 &
+    echo $! > "${PID_FILE}"
+    sleep 1
+    daemon_status
+}
+
+stop_daemon() {
+    if daemon_status; then
+        pid=$(cat "${PID_FILE}")
+        log "停止 ${APPNAME} (pid ${pid})"
+        kill -TERM "${pid}" 2>/dev/null
+        i=0
+        while [ $i -lt 15 ]; do
+            daemon_status || break
+            sleep 1
+            i=$((i + 1))
+        done
+        if daemon_status; then
+            kill -9 "${pid}" 2>/dev/null
+        fi
+    fi
+    pkill -f "${BIN}" 2>/dev/null
+    /bin/rm -f "${PID_FILE}"
+    return 0
+}
+
+do_start() {
+    if daemon_status; then
+        log "${APPNAME} 已在运行"
+        return 0
+    fi
+    start_daemon
+}
+
+do_stop() {
+    stop_daemon
+}

@@ -1,0 +1,9 @@
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${DIR}/common"
+
+log "安装初始化：${APPNAME}"
+/bin/mkdir -p "${PKGVAR}" "${DATA_DIR}"
+chmod +x "${BIN}" 2>/dev/null
+chown -R "${TRIM_USERNAME:-${APPNAME}}:${TRIM_GROUPNAME:-${APPNAME}}" "${PKGVAR}" 2>/dev/null
+exit 0

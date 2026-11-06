@@ -1,0 +1,7 @@
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${DIR}/common"
+log "应用配置变更完成"
+do_stop
+do_start
+exit 0

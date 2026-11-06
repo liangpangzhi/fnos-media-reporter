@@ -1,0 +1,8 @@
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${DIR}/common"
+
+log "安装完成：${APPNAME}，数据目录 ${DATA_DIR}"
+chmod +x "${BIN}" 2>/dev/null
+chown -R "${TRIM_USERNAME:-${APPNAME}}:${TRIM_GROUPNAME:-${APPNAME}}" "${PKGVAR}" 2>/dev/null
+exit 0

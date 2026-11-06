@@ -1,0 +1,41 @@
+name: build-fnos
+
+# 构建 fnOS fpk 安装包（x86 / arm）
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            platform: x86
+          - arch: arm64
+            platform: arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: 交叉编译静态二进制
+        run: |
+          mkdir -p fpk/app/bin
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} \
+            go build -trimpath -ldflags "-s -w" -o fpk/app/bin/media-reporter .
+
+      - name: 打包 fpk
+        run: |
+          sed -i "s/^platform.*=.*/platform        = ${{ matrix.platform }}/" fpk/manifest
+          python3 tools/package.py ${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fpk-${{ matrix.platform }}
+          path: dist/*.fpk

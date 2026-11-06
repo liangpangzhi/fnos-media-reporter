@@ -1,0 +1,7 @@
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${DIR}/common"
+
+log "卸载前停止服务"
+stop_daemon
+exit 0

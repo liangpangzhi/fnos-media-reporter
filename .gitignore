@@ -6,6 +6,11 @@ dist/
 build/
 bin/
 
+# ---- fpk 打包产物与中间文件 ----
+app.tgz
+*.fpk
+fpk/app/bin/media-reporter
+
 # ---- 运行期生成（含连接信息与真实媒体数据，禁止入库）----
 settings.json
 reports/
